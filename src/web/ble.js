@@ -37,6 +37,7 @@ export class BLETransport {
     this.onDisconnect = null;
     this.onPrinterInfo = null; // Callback for printer info updates
     this._useWriteWithResponse = false; // Some devices need writeValue instead of writeValueWithoutResponse
+    this._exclusiveTail = Promise.resolve();
     this.printerInfo = {
       battery: null,
       paper: null,
@@ -351,6 +352,14 @@ export class BLETransport {
     this._notificationHandler = null;
   }
 
+  // Runs fn after earlier exclusive tasks finish. The protocol is an unframed byte stream,
+  // so a status query written mid-print lands in the raster data and shifts the image.
+  exclusive(fn) {
+    const run = this._exclusiveTail.then(fn);
+    this._exclusiveTail = run.catch(() => {});
+    return run;
+  }
+
   /**
    * Send data to the printer
    */
@@ -652,23 +661,25 @@ export class BLETransport {
   /**
    * Query all available printer info
    */
-  async queryAll() {
-    if (!this.isConnected()) {
-      throw new Error('Not connected');
-    }
-
-    console.log('Querying all printer info...');
-
-    // Query each type with a small delay between
-    const queries = ['battery', 'paper', 'firmware', 'serial'];
-    for (const q of queries) {
-      try {
-        await this.query(q);
-        await this.delay(100);
-      } catch (e) {
-        console.warn(`Query ${q} failed:`, e.message);
+  queryAll() {
+    return this.exclusive(async () => {
+      if (!this.isConnected()) {
+        throw new Error('Not connected');
       }
-    }
+
+      console.log('Querying all printer info...');
+
+      // Query each type with a small delay between
+      const queries = ['battery', 'paper', 'firmware', 'serial'];
+      for (const q of queries) {
+        try {
+          await this.query(q);
+          await this.delay(100);
+        } catch (e) {
+          console.warn(`Query ${q} failed:`, e.message);
+        }
+      }
+    });
   }
 
   /**

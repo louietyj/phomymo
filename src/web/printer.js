@@ -612,7 +612,15 @@ function rotateRaster90CCW(data, widthBytes, heightLines) {
  * @param {number} options.feed - Feed after print in dots (default 32)
  * @param {Function} options.onProgress - Progress callback (percent)
  */
-export async function print(transport, rasterData, options = {}) {
+export function print(transport, rasterData, options = {}) {
+  return exclusive(transport, () => printUnlocked(transport, rasterData, options));
+}
+
+function exclusive(transport, fn) {
+  return transport.exclusive ? transport.exclusive(fn) : fn();
+}
+
+async function printUnlocked(transport, rasterData, options) {
   const { isBLE = false, deviceName = '', printerModel = 'auto', density = 6, feed = 32, continuous = false, onProgress = null } = options;
   const { data, widthBytes, heightLines } = rasterData;
 
@@ -1136,7 +1144,11 @@ async function printTSPL(transport, data, widthBytes, heightLines, labelWidthMm,
  * @param {boolean} isBLE - Whether using BLE transport
  * @param {Function} onProgress - Progress callback
  */
-export async function printDensityTest(transport, isBLE = true, onProgress = null) {
+export function printDensityTest(transport, isBLE = true, onProgress = null) {
+  return exclusive(transport, () => printDensityTestUnlocked(transport, isBLE, onProgress));
+}
+
+async function printDensityTestUnlocked(transport, isBLE, onProgress) {
   console.log('Printing density test pattern (using ESC 7 heat command)...');
 
   // Create a test pattern: 8 strips, each 30 pixels tall, 320 pixels wide
