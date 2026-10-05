@@ -5184,6 +5184,26 @@ function handleImportFile(file) {
   reader.readAsText(file);
 }
 
+// A design link carries the whole design in the fragment, so it never reaches the server:
+// #design=v1.<base64url(deflate-raw(design JSON))>
+function loadDesignFromHash() {
+  const match = location.hash.match(/^#design=v1\.([A-Za-z0-9_-]+)$/);
+  if (!match) return false;
+  decodeDesignLink(match[1])
+    .then(json => handleImportFile(new File([json], 'link.json', { type: 'application/json' })))
+    .catch(err => {
+      logError(err, 'loadDesignFromHash');
+      setStatus('Could not open design link');
+    });
+  return true;
+}
+
+async function decodeDesignLink(encoded) {
+  const bytes = Uint8Array.from(atob(encoded.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+  return new Response(stream).text();
+}
+
 /**
  * Update elements list dropdown
  */
@@ -8152,10 +8172,11 @@ function init() {
   // Detect template fields on load
   detectTemplateFields();
 
-  // Show info dialog on first visit
-  if (shouldShowInfoOnLoad()) {
+  // Open a design link, or show the info dialog on first visit
+  if (!loadDesignFromHash() && shouldShowInfoOnLoad()) {
     showInfoDialog();
   }
+  window.addEventListener('hashchange', loadDesignFromHash);
 
   // Initialize mobile UI
   initMobileUI();
