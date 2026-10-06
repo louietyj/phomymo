@@ -392,6 +392,65 @@ function getDitherMode(elements) {
   return 'auto';
 }
 
+// The elements Print sends: first template record substituted, then [[expressions]] evaluated.
+function getPrintElements() {
+  const elements = state.templateData.length > 0
+    ? substituteFields(state.elements, state.templateData[0])
+    : state.elements;
+  return evaluateExpressions(elements);
+}
+
+// The bitmap sent to the printer (raw for rotated printers like D-series and P12).
+function buildPrintRaster(elements, deviceName, printerModel) {
+  // Force threshold mode for TSPL printers: auto-detection can pick dithering from anti-aliased
+  // edges, and shipping-label barcodes need to stay crisp.
+  let ditherMode = getDitherMode(elements);
+  if (ditherMode === 'auto' && isTSPLPrinter(deviceName, printerModel)) {
+    ditherMode = 'threshold';
+  }
+  if (isRotatedPrinter(deviceName, printerModel)) {
+    return state.renderer.getRasterDataRaw(elements, ditherMode);
+  }
+  return state.renderer.getRasterData(
+    elements,
+    getPrinterWidthBytes(deviceName, printerModel),
+    getPrinterDpi(deviceName, printerModel),
+    ditherMode,
+    getPrinterAlignment(deviceName, printerModel),
+  );
+}
+
+// For scripted previews: once the design, fonts, images, barcodes and QR codes have loaded, returns the
+// bitmap Print would send as a PNG data URL (black = printed dot).
+window.phomymoPrintPreview = async (printerModel = state.printSettings.printerModel) => {
+  await state.designLinkLoad;
+  const deviceName = state.transport?.getDeviceName?.() || '';
+  const serialize = (raster) => raster.data.join(',');
+  // The first render starts font, image, barcode and QR loads; re-render until the output stops changing.
+  let raster = buildPrintRaster(getPrintElements(), deviceName, printerModel);
+  for (let attempt = 0; attempt < 50; attempt++) {
+    await document.fonts.ready;
+    await new Promise(resolve => setTimeout(resolve, 100));
+    const next = buildPrintRaster(getPrintElements(), deviceName, printerModel);
+    const settled = serialize(next) === serialize(raster) && state.renderer.loadingImages.size === 0;
+    raster = next;
+    if (settled) break;
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = raster.widthBytes * 8;
+  canvas.height = raster.heightLines;
+  const ctx = canvas.getContext('2d');
+  const image = ctx.createImageData(canvas.width, canvas.height);
+  for (let i = 0; i < canvas.width * canvas.height; i++) {
+    const on = raster.data[i >> 3] & (0x80 >> (i & 7));
+    image.data.fill(on ? 0 : 255, i * 4, i * 4 + 3);
+    image.data[i * 4 + 3] = 255;
+  }
+  ctx.putImageData(image, 0, 0);
+  return canvas.toDataURL('image/png');
+};
+
 /**
  * Save current state to history (call before modifications)
  */
@@ -1938,18 +1997,8 @@ async function handleBatchPrint() {
       // Evaluate instant expressions (date/time, etc.)
       const mergedElements = evaluateExpressions(substitutedElements);
 
-      // Render to raster (use raw format for rotated printers like D-series and P12)
       const deviceName = state.transport.getDeviceName?.() || '';
-      const printerWidth = getPrinterWidthBytes(deviceName, printerModel);
-      const printerAlignment = getPrinterAlignment(deviceName, printerModel);
-      // Force threshold mode for TSPL printers (shipping labels need crisp barcodes)
-      let ditherMode = getDitherMode(mergedElements);
-      if (ditherMode === 'auto' && isTSPLPrinter(deviceName, printerModel)) {
-        ditherMode = 'threshold';
-      }
-      const rasterData = isRotatedPrinter(deviceName, printerModel)
-        ? state.renderer.getRasterDataRaw(mergedElements, ditherMode)
-        : state.renderer.getRasterData(mergedElements, printerWidth, 203, ditherMode, printerAlignment);
+      const rasterData = buildPrintRaster(mergedElements, deviceName, printerModel);
 
       // Print
       await print(state.transport, rasterData, {
@@ -2025,18 +2074,8 @@ async function handlePrintSinglePreview() {
     const substitutedElements = substituteFields(state.elements, record);
     const mergedElements = evaluateExpressions(substitutedElements);
 
-    // Render to raster (use raw format for rotated printers like D-series and P12)
     const deviceName = state.transport.getDeviceName?.() || '';
-    const printerWidth = getPrinterWidthBytes(deviceName, printerModel);
-    const printerAlignment = getPrinterAlignment(deviceName, printerModel);
-    // Force threshold mode for TSPL printers (shipping labels need crisp barcodes)
-    let ditherMode = getDitherMode(mergedElements);
-    if (ditherMode === 'auto' && isTSPLPrinter(deviceName, printerModel)) {
-      ditherMode = 'threshold';
-    }
-    const rasterData = isRotatedPrinter(deviceName, printerModel)
-      ? state.renderer.getRasterDataRaw(mergedElements, ditherMode)
-      : state.renderer.getRasterData(mergedElements, printerWidth, 203, ditherMode, printerAlignment);
+    const rasterData = buildPrintRaster(mergedElements, deviceName, printerModel);
 
     // Print
     await print(state.transport, rasterData, {
@@ -4755,29 +4794,8 @@ async function handlePrint() {
 
     btn.textContent = 'Printing...';
 
-    // Substitute template fields if template data is loaded
-    const elements = state.templateData.length > 0
-      ? substituteFields(state.elements, state.templateData[0])
-      : state.elements;
-
-    // Evaluate instant expressions (date/time, etc.)
-    const elementsToRender = evaluateExpressions(elements);
-
-    // Render to raster (use raw format for rotated printers like D-series and P12)
     const deviceName = state.transport.getDeviceName?.() || '';
-    const printerWidth = getPrinterWidthBytes(deviceName, printerModel);
-    const printerDpi = getPrinterDpi(deviceName, printerModel);
-    const printerAlignment = getPrinterAlignment(deviceName, printerModel);
-    // Force threshold mode for TSPL printers (shipping labels need crisp barcodes)
-    // Auto-detection can incorrectly choose dithering due to anti-aliased edges
-    let ditherMode = getDitherMode(elementsToRender);
-    if (ditherMode === 'auto' && isTSPLPrinter(deviceName, printerModel)) {
-      ditherMode = 'threshold';
-      console.log('TSPL printer: forcing threshold mode for crisp barcodes');
-    }
-    const rasterData = isRotatedPrinter(deviceName, printerModel)
-      ? state.renderer.getRasterDataRaw(elementsToRender, ditherMode)
-      : state.renderer.getRasterData(elementsToRender, printerWidth, printerDpi, ditherMode, printerAlignment);
+    const rasterData = buildPrintRaster(getPrintElements(), deviceName, printerModel);
 
     // Print multiple copies if requested
     for (let copy = 1; copy <= copies; copy++) {
@@ -5181,7 +5199,9 @@ function handleImportFile(file) {
       setStatus(`Import failed: ${err.message}`);
     }
   };
+  const done = new Promise(resolve => reader.addEventListener('loadend', resolve));
   reader.readAsText(file);
+  return done;
 }
 
 // A design link carries the whole design in the fragment, so it never reaches the server:
@@ -5189,7 +5209,7 @@ function handleImportFile(file) {
 function loadDesignFromHash() {
   const match = location.hash.match(/^#design=v1\.([A-Za-z0-9_-]+)$/);
   if (!match) return false;
-  decodeDesignLink(match[1])
+  state.designLinkLoad = decodeDesignLink(match[1])
     .then(json => handleImportFile(new File([json], 'link.json', { type: 'application/json' })))
     .catch(err => {
       logError(err, 'loadDesignFromHash');
