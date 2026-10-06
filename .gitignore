@@ -3,6 +3,7 @@
 *.md
 !README.md
 !docs/manual.md
+!src/web/docs/design-format.md
 node_modules/
 
 # Playwright
