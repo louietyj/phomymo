@@ -28,9 +28,9 @@ check of any guess is to render it: `window.phomymoPrintPreview()` returns the e
 }
 ```
 
-`labelSize` is in **mm**. The M110 head is 48 mm (384 dots) wide, so `width` is at most 48 there (other
-printers: `widthBytes` in `printers.json`); a 40 mm tall label is 320 dots. `round: true` clips to a
-circle.
+`labelSize` is in **mm**. `width` runs across the print head and `height` along the feed direction. The
+M110 head is 48 mm (384 dots) wide, so `width` is at most 48 there even on wider stock (other printers:
+`widthBytes` in `printers.json`); a 40 mm tall label is 320 dots. `round: true` clips to a circle.
 
 ## Every element
 
@@ -49,7 +49,7 @@ Later elements draw on top of earlier ones.
 
 | field | values |
 |---|---|
-| `text` | `\n` for line breaks; `[[dt\|YYYY-MM-DD]]`, `[[date]]`, `[[time]]` fill at print time |
+| `text` | `\n` for line breaks; `[[...]]` expressions (below) fill at print time |
 | `fontSize` | px (dots); 30 is a bold headline on a 40 mm label, 18-20 is small print |
 | `fontFamily` | `"Inter, sans-serif"` (the editor's default). Also Roboto, Open Sans, Lato, Montserrat, Oswald, Playfair Display, Merriweather, Roboto Mono, Source Code Pro |
 | `fontWeight` | `normal`, `bold` |
@@ -64,6 +64,26 @@ Later elements draw on top of earlier ones.
 | `autoScale` | `true`: ignore `fontSize` and use the **largest** size (6-200) at which the text fits the box. It grows short text as well as shrinking long text, and with wrapping on it will wrap a line to get bigger, so pair it with `noWrap: true` for one item per line |
 
 Lines are `fontSize * 1.2` apart and word-wrap at the box width.
+
+## `[[...]]` expressions
+
+Evaluated in `text`, `barcodeData` and `qrData` when the label is printed or previewed, from the clock of
+the device doing it (`templates.js`, `evaluateExpressionsInString`):
+
+| expression | gives |
+|---|---|
+| `[[date]]`, `[[time]]`, `[[dt]]` (or `datetime`) | `YYYY-MM-DD`, `HH:mm:ss`, `YYYY-MM-DD HH:mm:ss`, or the format after a `\|` |
+| `[[year]]`, `[[month]]`, `[[day]]`, `[[hour]]`, `[[minute]]`, `[[second]]` | one zero-padded field; a format is ignored |
+| `[[timestamp]]` (or `ts`) | milliseconds since 1970 |
+
+Format tokens: `YYYY YY MM M DD D HH H hh h mm m ss s A a Z` (`A`/`a` = AM/PM, `Z` = UTC offset). The
+format is applied as plain letter-by-letter replacements, with no escaping, so **every** one of those
+letters in the format is replaced, inside words too: `[[dt|Made YYYY-MM-DD]]` prints "10pmde 2026-10-05".
+Keep words outside the brackets: `Made [[date]]`.
+
+There is no date arithmetic and no day or month names: `[[date+3]]` is an unknown expression and stays
+exactly as written, and `[[dt|ddd]]` prints "ddd". A date that isn't today has to be written out
+literally.
 
 ## shape
 
