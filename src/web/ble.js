@@ -35,6 +35,8 @@ export class BLETransport {
     this.notifyChar = null;
     this.connected = false;
     this.onDisconnect = null;
+    this.onReconnect = null;
+    this.connectedAt = 0;
     this.onPrinterInfo = null; // Callback for printer info updates
     this._useWriteWithResponse = false; // Some devices need writeValue instead of writeValueWithoutResponse
     this._exclusiveTail = Promise.resolve();
@@ -343,6 +345,7 @@ export class BLETransport {
     }
 
     this.connected = true;
+    this.connectedAt = performance.now();
     console.log('Connected to', this.device.name);
   }
 
@@ -371,6 +374,21 @@ export class BLETransport {
     this.writeChar = null;
     this.notifyChar = null;
     this._notificationHandler = null;
+  }
+
+  // An unpaired M110 drops the link ~29 s after it opens, most likely because Web Bluetooth never
+  // answers its SMP security request (the spec times that out at 30 s). A job takes a few seconds, so
+  // start each one on a link young enough to outlive it, reconnecting to the known device if not.
+  // A link that has outlived 30 s (a paired device, other printers) is left alone.
+  async ensureFreshLink(maxAgeMs = 22000) {
+    const age = performance.now() - this.connectedAt;
+    if (this.isConnected() && (age <= maxAgeMs || age > 30000)) return;
+    if (!this.device) throw new Error('Not connected');
+    console.log('Reconnecting so the job starts on a fresh link');
+    if (this.device.gatt.connected) this.device.gatt.disconnect();
+    this.connected = false;
+    await this.retryWithBackoff(() => this.connectGATT(), BLE.MAX_RETRIES, BLE.INITIAL_RETRY_DELAY_MS);
+    if (this.onReconnect) this.onReconnect();
   }
 
   // Runs fn after earlier exclusive tasks finish. The protocol is an unframed byte stream,

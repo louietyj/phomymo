@@ -613,7 +613,10 @@ function rotateRaster90CCW(data, widthBytes, heightLines) {
  * @param {Function} options.onProgress - Progress callback (percent)
  */
 export function print(transport, rasterData, options = {}) {
-  return exclusive(transport, () => printUnlocked(transport, rasterData, options));
+  return exclusive(transport, async () => {
+    await transport.ensureFreshLink?.();
+    return printUnlocked(transport, rasterData, options);
+  });
 }
 
 function exclusive(transport, fn) {
@@ -1145,7 +1148,10 @@ async function printTSPL(transport, data, widthBytes, heightLines, labelWidthMm,
  * @param {Function} onProgress - Progress callback
  */
 export function printDensityTest(transport, isBLE = true, onProgress = null) {
-  return exclusive(transport, () => printDensityTestUnlocked(transport, isBLE, onProgress));
+  return exclusive(transport, async () => {
+    await transport.ensureFreshLink?.();
+    return printDensityTestUnlocked(transport, isBLE, onProgress);
+  });
 }
 
 async function printDensityTestUnlocked(transport, isBLE, onProgress) {

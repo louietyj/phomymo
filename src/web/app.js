@@ -5,9 +5,9 @@
  */
 
 import { CanvasRenderer } from './canvas.js?v=115';
-import { BLETransport } from './ble.js?v=105';
+import { BLETransport } from './ble.js?v=106';
 import { USBTransport } from './usb.js?v=101';
-import { print, printDensityTest, isDSeriesPrinter, isP12Printer, isA30Printer, isTapePrinter, isPM241Printer, isTSPLPrinter, isRotatedPrinter, getPrinterWidthBytes, getPrinterDpi, getPrinterAlignment, getPrinterDescription, isDeviceRecognized, getMatchedPattern, loadPrinterDefinitions, getAllPrinterDefinitions, getPrinterDefinition, getCustomPrinterDefinitions, saveCustomPrinterDefinition, deleteCustomPrinterDefinition, isBuiltinPrinter, resetBuiltinPrinter, getAvailableProtocols, getAvailableLabelPresets, getDetectedDefinition } from './printer.js?v=129';
+import { print, printDensityTest, isDSeriesPrinter, isP12Printer, isA30Printer, isTapePrinter, isPM241Printer, isTSPLPrinter, isRotatedPrinter, getPrinterWidthBytes, getPrinterDpi, getPrinterAlignment, getPrinterDescription, isDeviceRecognized, getMatchedPattern, loadPrinterDefinitions, getAllPrinterDefinitions, getPrinterDefinition, getCustomPrinterDefinitions, saveCustomPrinterDefinition, deleteCustomPrinterDefinition, isBuiltinPrinter, resetBuiltinPrinter, getAvailableProtocols, getAvailableLabelPresets, getDetectedDefinition } from './printer.js?v=130';
 import {
   createTextElement,
   createImageElement,
@@ -4702,6 +4702,11 @@ async function handleConnect(event) {
     }
 
     updateConnectionStatus(true);
+    state.transport.onDisconnect = () => {
+      updateConnectionStatus(false);
+      setStatus('Printer disconnected; Print reconnects automatically');
+    };
+    state.transport.onReconnect = () => updateConnectionStatus(true);
 
     // Check device recognition and handle accordingly
     const deviceName = state.transport.getDeviceName?.() || '';
@@ -4765,9 +4770,9 @@ async function handleConnect(event) {
   } catch (error) {
     logError(error, 'handleConnect');
     setStatus(error.message || 'Connection failed');
-    btn.textContent = originalText;
     updateConnectionStatus(false);
   } finally {
+    btn.textContent = originalText;
     btn.disabled = false;
   }
 }
