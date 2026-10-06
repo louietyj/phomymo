@@ -1,5 +1,10 @@
 # Phomymo
 
+> **This fork** (louietyj/phomymo, live at https://phomymo.louietyj.me) adds `#design=` links that open a
+> ready-to-print design, a scripted print preview, a [design format reference](src/web/docs/design-format.md),
+> and M110 Bluetooth fixes. See [CLAUDE.md](CLAUDE.md) for what changed and why. The rest of this README
+> is upstream's.
+
 A free, browser-based label designer for Phomemo thermal printers. No drivers needed - connects via Bluetooth or USB.
 
 **Try it now: https://phomymo.affordablemagic.net**
