@@ -91,7 +91,7 @@ literally.
 |---|---|
 | `shapeType` | `rectangle`, `ellipse`, `triangle`, `line` (horizontal through the box centre; rotate it for other angles) |
 | `fill` | `white`, `black`, or a dither grey: `dither-6`, `-12`, `-25`, `-37`, `-50`, `-62`, `-75`, `-87`, `-94` (% grey) |
-| `stroke` | `none`, `black`, `white` |
+| `stroke` | `none`, `black`, `white`. A `line` is drawn in `stroke` (`fill` only if `stroke` is missing), so give it `black` or `white`: `none` is an invalid colour there and the line takes whatever colour was drawn last |
 | `strokeWidth` | dots |
 | `cornerRadius` | dots, rectangles only |
 
