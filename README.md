@@ -1,9 +1,55 @@
 # Phomymo
 
-> **This fork** (louietyj/phomymo, live at https://phomymo.louietyj.me) adds `#design=` links that open a
-> ready-to-print design, a scripted print preview, a [design format reference](src/web/docs/design-format.md),
-> and M110 Bluetooth fixes. See [CLAUDE.md](CLAUDE.md) for what changed and why. The rest of this README
-> is upstream's.
+## This fork
+
+[louietyj/phomymo](https://github.com/louietyj/phomymo) is a fork of
+[transcriptionstream/phomymo](https://github.com/transcriptionstream/phomymo), live at
+**https://phomymo.louietyj.me**. It is used with a Phomemo **M110** (BLE name `Q468E6917560038`) and
+50 x 40 mm labels, designed as 48 x 40 because the print head is 48 mm. Everything below this section is
+upstream's README.
+
+**Deploying.** Every push to `master` publishes `src/web/` to GitHub Pages (`.github/workflows/pages.yml`;
+Cloudflare CNAME, DNS-only). There is no build step, so bump the `?v=` cache-busters on any module you
+change (`app.js` in `index.html`, the other modules in `app.js`), as upstream does.
+
+**What the fork adds**
+
+- `#design=v1.<base64url(deflate-raw(design JSON))>` links open a whole design (`loadDesignFromHash` in
+  `app.js`), so a script can hand over a ready-to-print label.
+- `window.phomymoPrintPreview(model)` returns the exact print bitmap as a PNG data URL. It is built by
+  `buildPrintRaster()`, the function every print path uses, so a preview can't drift from a print.
+- [`src/web/docs/design-format.md`](src/web/docs/design-format.md) documents the design JSON, reverse-engineered
+  from this code; update it when element fields or rendering change.
+- Upstream PR #49, which stops Windows and Android notification failures from dropping the link.
+- Fixes for the M110 Bluetooth behaviour below.
+
+**M110 Bluetooth notes** (measured 2026-10-05/06)
+
+- The protocol is an unframed byte stream. A status query written while a job is sending lands inside the
+  raster and shifts every following row. All writes therefore go through `BLETransport.exclusive()` (print
+  jobs, the density test, `queryAll`); anything new that writes to the printer must too.
+- An unpaired link dies about 28.8 s after it opens, whatever is sent: keepalives don't help, a fresh
+  connection resets the clock, and pairing at the OS level removes the limit (but then that device holds the
+  printer and locks others out). The likely cause is an unanswered SMP security request hitting the spec's
+  30 s timeout. `ensureFreshLink()` reconnects before any job on a link older than 22 s. Reconnecting takes
+  about 5 s on Windows, which keeps the old link for ~3 s after `gatt.disconnect()`.
+- The printer answers the `1f 11 xx` status queries (battery `08`, paper `11`, firmware `07`, serial `09`);
+  firmware is 2.2.3. `M110` and `M110S` in Print Settings differ only in alignment, which makes no
+  difference to a full-width 48 mm design.
+
+**Testing locally**
+
+- Serve `src/web` on localhost, since Web Bluetooth needs https or localhost, e.g.
+  `python -m http.server 8765 --bind 127.0.0.1` (port 8080 is blocked on the maintainer's Windows machine).
+- Chrome opens the device picker only on a real user gesture, so a script's click is refused: a person has
+  to press Connect and pick the printer. Reconnecting to an already known device needs no gesture.
+- Driving a normal Chrome over CDP pops an "Allow remote debugging" prompt on every connection, so keep
+  connections few and don't poll.
+- For byte-level debugging, the unpushed local branch `debug-ble-capture` adds `?log=1` (a hex log of every
+  write, saved with `phomymoDebug.download()`), `?noquery=1`, `?nonotify=1` and `?reset=1`. A label with a
+  tick every 8 dots turns any shift into a byte count you can read off a photo.
+
+---
 
 A free, browser-based label designer for Phomemo thermal printers. No drivers needed - connects via Bluetooth or USB.
 
