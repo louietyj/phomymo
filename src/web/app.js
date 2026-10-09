@@ -1924,7 +1924,6 @@ async function handleBatchPrint() {
 
   const btn = $('#template-print-btn');
   const originalText = btn.textContent;
-  const { density, feed, printerModel } = state.printSettings;
 
   // Calculate total prints based on multi-label mode
   const isMultiLabel = state.multiLabel.enabled;
@@ -1952,6 +1951,9 @@ async function handleBatchPrint() {
       }
       showTemplateDataDialog();
     }
+
+    // Read after connecting: handleConnect() may set printerModel from the saved device mapping
+    const { density, feed, printerModel } = state.printSettings;
 
     // Show progress modal
     const labelText = isMultiLabel && !cloneMode
@@ -2053,7 +2055,6 @@ async function handlePrintSinglePreview() {
 
   const btn = $('#full-preview-print');
   const originalText = btn.textContent;
-  const { density, feed, printerModel } = state.printSettings;
 
   try {
     btn.disabled = true;
@@ -2069,6 +2070,9 @@ async function handlePrintSinglePreview() {
         throw new Error('Please connect to printer first');
       }
     }
+
+    // Read after connecting: handleConnect() may set printerModel from the saved device mapping
+    const { density, feed, printerModel } = state.printSettings;
 
     // Substitute fields and evaluate expressions
     const substitutedElements = substituteFields(state.elements, record);
@@ -4783,7 +4787,6 @@ async function handleConnect(event) {
 async function handlePrint() {
   const btn = $('#print-btn');
   const originalText = btn.textContent;
-  const { density, copies, feed, printerModel } = state.printSettings;
 
   try {
     btn.disabled = true;
@@ -4796,6 +4799,9 @@ async function handlePrint() {
         throw new Error('Please connect to printer first');
       }
     }
+
+    // Read after connecting: handleConnect() may set printerModel from the saved device mapping
+    const { density, copies, feed, printerModel } = state.printSettings;
 
     btn.textContent = 'Printing...';
 
