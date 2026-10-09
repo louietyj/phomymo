@@ -1177,6 +1177,11 @@
           Import from File
         </button>
         <input type="file" id="import-file-input" class="hidden" accept=".json,application/json">
+        <button id="bulk-import-btn" class="w-full mt-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm flex items-center justify-center gap-2" title="Save each file as a design named after the file">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+          Import Files into Saved Designs
+        </button>
+        <input type="file" id="bulk-import-input" class="hidden" accept=".json,application/json" multiple>
       </div>
       <div class="flex gap-2">
         <button id="load-cancel" class="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
@@ -2143,7 +2148,7 @@
     pdfjsModule.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.mjs';
     window.pdfjsLib = pdfjsModule;
   </script>
-  <script type="module" src="app.js?v=157"></script>
+  <script type="module" src="app.js?v=158"></script>
   <script>
     // Show body once styles are ready
     requestAnimationFrame(() => {

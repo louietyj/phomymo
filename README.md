@@ -20,6 +20,8 @@ change (`app.js` in `index.html`, the other modules in `app.js`), as upstream do
   `buildPrintRaster()`, the function every print path uses, so a preview can't drift from a print.
 - [`src/web/docs/design-format.md`](src/web/docs/design-format.md) documents the design JSON, reverse-engineered
   from this code; update it when element fields or rendering change.
+- **Import Files into Saved Designs** in the Load dialog saves any number of design JSONs at once, each
+  named after its file.
 - Upstream PR #49, which stops Windows and Android notification failures from dropping the link.
 - Fixes for the M110 Bluetooth behaviour below.
 

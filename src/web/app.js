@@ -54,6 +54,7 @@ import {
   loadDesign,
   listDesigns,
   deleteDesign,
+  importDesign,
 } from './storage.js?v=100';
 import {
   extractFields,
@@ -5215,6 +5216,32 @@ function handleImportFile(file) {
   return done;
 }
 
+// Saves each file as a design named after it, replacing any design of that name as Save does
+async function handleBulkImport(files) {
+  const failed = [];
+  let imported = 0;
+  for (const file of files) {
+    const fileCheck = validateJSONFile(file);
+    const nameCheck = validateDesignName(file.name.replace(/\.json$/i, ''));
+    try {
+      if (!fileCheck.valid) throw new Error(fileCheck.error);
+      if (!nameCheck.valid) throw new Error(nameCheck.error);
+      importDesign(await file.text(), nameCheck.sanitized);
+      imported++;
+    } catch (err) {
+      logError(err, 'bulkImport');
+      failed.push(`${file.name}: ${err.message}`);
+    }
+  }
+
+  showLoadDialog(); // Refresh list
+  const summary = `Imported ${imported} of ${files.length} designs`;
+  setStatus(summary);
+  if (failed.length) {
+    showToast(`${summary}. Failed: ${failed.join('; ')}`, 'error');
+  }
+}
+
 // A design link carries the whole design in the fragment, so it never reaches the server:
 // #design=v1.<base64url(deflate-raw(design JSON))>
 function loadDesignFromHash() {
@@ -7535,6 +7562,12 @@ function init() {
       handleImportFile(e.target.files[0]);  // Validation inside function
       e.target.value = '';
     }
+  });
+  $('#bulk-import-btn').addEventListener('click', () => $('#bulk-import-input').click());
+  $('#bulk-import-input').addEventListener('change', (e) => {
+    const files = [...e.target.files];
+    e.target.value = '';
+    if (files.length) handleBulkImport(files);
   });
 
   // Export dropdown toggle
