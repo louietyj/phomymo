@@ -7,6 +7,7 @@
 import { CanvasRenderer } from './canvas.js?v=115';
 import { BLETransport } from './ble.js?v=106';
 import { USBTransport } from './usb.js?v=101';
+import { SerialTransport } from './serial.js?v=1';
 import { print, printDensityTest, isDSeriesPrinter, isP12Printer, isA30Printer, isTapePrinter, isPM241Printer, isTSPLPrinter, isRotatedPrinter, getPrinterWidthBytes, getPrinterDpi, getPrinterAlignment, getPrinterDescription, isDeviceRecognized, getMatchedPattern, loadPrinterDefinitions, getAllPrinterDefinitions, getPrinterDefinition, getCustomPrinterDefinitions, saveCustomPrinterDefinition, deleteCustomPrinterDefinition, isBuiltinPrinter, resetBuiltinPrinter, getAvailableProtocols, getAvailableLabelPresets, getDetectedDefinition } from './printer.js?v=130';
 import {
   createTextElement,
@@ -85,7 +86,7 @@ import {
   D_SERIES_ROUND_LABELS,
   TAPE_LABEL_SIZES,
   PM241_LABEL_SIZES,
-} from './constants.js?v=105';
+} from './constants.js?v=106';
 import {
   bindCheckbox,
   bindToggleButton,
@@ -228,6 +229,11 @@ const state = {
 };
 
 // Note: GUIDES.SNAP_THRESHOLD, HISTORY.MAX_SIZE, and STORAGE_KEYS are imported from constants.js
+
+// Bluetooth serial carries the same byte stream as BLE, so it takes the BLE print paths
+function usesBleProtocol() {
+  return state.connectionType !== 'usb';
+}
 
 /**
  * Get saved device-to-model mappings from localStorage
@@ -2005,7 +2011,7 @@ async function handleBatchPrint() {
 
       // Print
       await print(state.transport, rasterData, {
-        isBLE: state.connectionType === 'ble',
+        isBLE: usesBleProtocol(),
         deviceName,
         printerModel,
         density,
@@ -2084,7 +2090,7 @@ async function handlePrintSinglePreview() {
 
     // Print
     await print(state.transport, rasterData, {
-      isBLE: state.connectionType === 'ble',
+      isBLE: usesBleProtocol(),
       deviceName,
       printerModel,
       density,
@@ -4684,15 +4690,25 @@ async function handleConnect(event) {
   try {
     btn.disabled = true;
     btn.textContent = 'Connecting...';
-    setStatus(showAllDevices ? 'Select your printer (showing all devices)' : 'Select printer with signal indicator (📶)');
-
     const isBLE = state.connectionType === 'ble';
+    const isSerial = state.connectionType === 'serial';
+
+    if (isSerial) {
+      setStatus('Select your printer (pair it in your Bluetooth settings first)');
+    } else {
+      setStatus(showAllDevices ? 'Select your printer (showing all devices)' : 'Select printer with signal indicator (📶)');
+    }
 
     if (isBLE) {
       if (!BLETransport.isAvailable()) {
         throw new Error('Bluetooth is not supported');
       }
       state.transport = BLETransport.getShared();
+    } else if (isSerial) {
+      if (!SerialTransport.isAvailable()) {
+        throw new Error('Bluetooth serial is not supported in this browser');
+      }
+      state.transport = SerialTransport.getShared();
     } else {
       if (!USBTransport.isAvailable()) {
         throw new Error('USB is not supported');
@@ -4715,6 +4731,10 @@ async function handleConnect(event) {
 
     // Check device recognition and handle accordingly
     const deviceName = state.transport.getDeviceName?.() || '';
+    // Serial ports carry no name to detect a model from; the M110C is the one that needs serial
+    if (isSerial && !getSavedDeviceModel(deviceName)) {
+      saveDeviceMapping(deviceName, 'm110');
+    }
     const recognized = isDeviceRecognized(deviceName);
     const savedModel = getSavedDeviceModel(deviceName);
     const printerModel = state.printSettings.printerModel;
@@ -4815,7 +4835,7 @@ async function handlePrint() {
       setStatus(`Printing${copyText}...`);
 
       await print(state.transport, rasterData, {
-        isBLE: state.connectionType === 'ble',
+        isBLE: usesBleProtocol(),
         deviceName,
         printerModel,
         density,
@@ -6020,6 +6040,7 @@ function initMobileUI() {
     mobileConnType.addEventListener('change', (e) => {
       desktopConnType.value = e.target.value;
       state.connectionType = e.target.value;
+      safeStorageSet(STORAGE_KEYS.CONNECTION_TYPE, e.target.value);
     });
   }
 
@@ -7198,12 +7219,22 @@ function init() {
 
   // Connection type
   const connType = $('#conn-type');
-  if (!('usb' in navigator)) {
-    const usbOption = connType.querySelector('option[value="usb"]');
-    if (usbOption) usbOption.remove();
+  // Option values double as the navigator API each one needs
+  for (const api of ['usb', 'serial']) {
+    if (!(api in navigator)) {
+      for (const sel of [connType, $('#mobile-conn-type')]) {
+        sel?.querySelector(`option[value="${api}"]`)?.remove();
+      }
+    }
+  }
+  const savedConnType = safeStorageGet(STORAGE_KEYS.CONNECTION_TYPE);
+  if (savedConnType && connType.querySelector(`option[value="${savedConnType}"]`)) {
+    connType.value = savedConnType;
+    state.connectionType = savedConnType;
   }
   connType.addEventListener('change', (e) => {
     state.connectionType = e.target.value;
+    safeStorageSet(STORAGE_KEYS.CONNECTION_TYPE, e.target.value);
     const btn = $('#connect-btn');
     btn.textContent = 'Connect';
     btn.classList.remove('bg-green-100', 'text-green-800', 'border-green-300');
@@ -7442,7 +7473,7 @@ function init() {
 
       await printDensityTest(
         state.transport,
-        state.connectionType === 'ble',
+        usesBleProtocol(),
         (progress) => setStatus(`Printing density test... ${progress}%`)
       );
 

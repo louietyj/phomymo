@@ -24,6 +24,9 @@ change (`app.js` in `index.html`, the other modules in `app.js`), as upstream do
   named after its file.
 - Upstream PR #49, which stops Windows and Android notification failures from dropping the link.
 - Fixes for the M110 Bluetooth behaviour below.
+- A **Bluetooth serial** connection type (`serial.js`, Web Serial over RFCOMM) for printers that only print
+  over Bluetooth Classic, such as the M110C below. It uses the M110 profile, and the connection type is
+  remembered, so a design link prints without picking it again.
 
 **M110 Bluetooth notes** (measured 2026-10-05/06)
 
@@ -38,6 +41,19 @@ change (`app.js` in `index.html`, the other modules in `app.js`), as upstream do
 - The printer answers the `1f 11 xx` status queries (battery `08`, paper `11`, firmware `07`, serial `09`);
   firmware is 2.2.3. `M110` and `M110S` in Print Settings differ only in alignment, which makes no
   difference to a full-width 48 mm design.
+
+**M110C notes** (measured 2026-10-21; BLE name `Q199E4881200062`, sold as an M110)
+
+- It is dual-mode and prints only over Bluetooth Classic SPP. Its BLE side has the same `ff00` service as the
+  M110 and accepts writes, but silently drops them, and subscribing to `ff03` fails with Insufficient
+  Authentication, paired or not. It also advertises HID (`0x1812`), which is why phones prompt to pair.
+- The job bytes are the M110's, and the printer answers a finished job with `1a 0f 0c`.
+- SPP needs an OS-level pairing, and the printer holds only one: a second device can't pair (Android reports
+  an auth failure) until the first removes it.
+- Web Serial reaches it from desktop Chrome and from Chrome 155 on a Pixel 11 Pro (Android 17). Chromium
+  issue 575560143 reports Android Chrome listing no RFCOMM ports on devices without the new Android Serial
+  service, so other phones may not work.
+- Testing on the phone: `adb reverse tcp:8765 tcp:8765` and open `http://localhost:8765`, a secure context.
 
 **Testing locally**
 
