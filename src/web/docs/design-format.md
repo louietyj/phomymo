@@ -107,8 +107,8 @@ literally.
 `GS1_128` is Code 128 with a leading FNC1 (scanners report `]C1`), as on USPS tracking barcodes. Spaces are
 ignored, and AIs may be written in parentheses, e.g. `(420)94086(92)0012...`, to put an FNC1 between them.
 
-Bars are snapped to whole dots, so a box too narrow for the data shows a red strip in the editor and won't
-scan. The strip survives into the print bitmap as a black line along the bottom, so a preview shows it.
+Bars are as wide as fits the box in half-dot steps of module width (1, 1.5, 2... dots), centred. A box
+narrower than one dot per module shows a red strip in the editor and won't scan. The strip survives into the print bitmap as a black line along the bottom, so a preview shows it.
 
 ## qr
 

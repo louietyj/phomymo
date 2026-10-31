@@ -1209,118 +1209,63 @@ export class CanvasRenderer {
     const renderHeight = Math.max(1, Math.round(height * renderScale));
     const renderFontSize = textFontSize * renderScale;
 
-    // Probe module count by generating with width=1, margin=0.
-    // The output SVG width then equals the module count in pixels.
-    let moduleCount = 0;
-    try {
-      const probeSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-      JsBarcode(probeSvg, encodedData, {
-        ...formatOptions,
-        width: 1,
-        height: 10,
-        displayValue: false,
-        margin: 0,
-      });
-      moduleCount = parseInt(probeSvg.getAttribute('width'), 10) || 0;
-    } catch (e) {
-      // Invalid data for chosen format — fall through and let real generation throw a logged error.
-    }
-
-    // Pick a bar width that yields integer-pixel bars at print resolution.
-    // The print canvas is at PX_PER_MM=8 (203 DPI), so `width` here is already in
-    // print pixels. We need bars that are >=1 px after the 1:renderScale blit.
-    const elementPxWidth = Math.max(1, Math.round(width));
-    let barWidthOut = moduleCount > 0 ? Math.floor(elementPxWidth / moduleCount) : 2;
-    const tooSmall = moduleCount > 0 && barWidthOut < 1;
-    if (barWidthOut < 1) barWidthOut = 1;
-    const barWidthCache = barWidthOut * renderScale;
-
-    const cacheKey = `barcode_${element.id}_${barcodeData}_${barcodeFormat}_${renderWidth}_${renderHeight}_${showText}_${textFontSize}_${textBold}_${barWidthCache}_${tooSmall ? 1 : 0}`;
+    const cacheKey = `barcode_${element.id}_${barcodeData}_${barcodeFormat}_${renderWidth}_${renderHeight}_${showText}_${textFontSize}_${textBold}`;
     let cachedCanvas = this._getFromRenderCache(cacheKey);
 
     if (!cachedCanvas) {
       try {
-        // Reserve vertical room for the readout text
-        const textHeightScaled = showText ? renderFontSize + (8 * renderScale) : 0;
-        const barcodeHeightScaled = Math.max(1, renderHeight - textHeightScaled);
+        const encoded = {};
+        JsBarcode(encoded, encodedData, formatOptions);
+        const modules = encoded.encodings.map((e) => e.data).join('');
 
-        // Generate at the chosen integer module width; margin=0 since we center manually.
-        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-        JsBarcode(svg, encodedData, {
-          ...formatOptions,
-          width: barWidthCache,
-          height: Math.round(barcodeHeightScaled * 0.85),
-          displayValue: false,
-          margin: 0,
-        });
+        // Modules are a multiple of half a print dot, the widest that fits the box:
+        // whole dots alone jump from 1 (half the label) to 2 (overflowing it). At a
+        // half-dot step no edge is more than half a dot off; finer fractions don't scan.
+        const elementPxWidth = Math.max(1, Math.round(width));
+        const tooSmall = elementPxWidth < modules.length;
+        const dotsPerModule = Math.max(1, Math.floor((2 * elementPxWidth) / modules.length) / 2);
+        const offset = Math.floor((elementPxWidth - Math.round(modules.length * dotsPerModule)) / 2);
+        const edge = (i) => (Math.max(0, offset) + Math.round(i * dotsPerModule)) * renderScale;
 
-        const svgData = new XMLSerializer().serializeToString(svg);
-        const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
-        const url = URL.createObjectURL(svgBlob);
+        cachedCanvas = document.createElement('canvas');
+        cachedCanvas.width = renderWidth;
+        cachedCanvas.height = renderHeight;
+        const tempCtx = cachedCanvas.getContext('2d');
+        tempCtx.fillStyle = 'white';
+        tempCtx.fillRect(0, 0, renderWidth, renderHeight);
 
-        const tempImg = new Image();
-        tempImg.onload = () => {
-          cachedCanvas = document.createElement('canvas');
-          cachedCanvas.width = renderWidth;
-          cachedCanvas.height = renderHeight;
-          const tempCtx = cachedCanvas.getContext('2d');
-          tempCtx.imageSmoothingEnabled = false;
+        const textReserve = showText ? renderFontSize + (8 * renderScale) : 0;
+        const textSpace = showText ? renderFontSize + (6 * renderScale) : 0;
+        const barsHeight = Math.max(1, Math.min(Math.round((renderHeight - textReserve) * 0.85), renderHeight - textSpace));
+        const dy = 2 * renderScale;
 
-          // Clip + white background
-          tempCtx.beginPath();
-          tempCtx.rect(0, 0, renderWidth, renderHeight);
-          tempCtx.clip();
-          tempCtx.fillStyle = 'white';
-          tempCtx.fillRect(0, 0, renderWidth, renderHeight);
+        tempCtx.fillStyle = 'black';
+        for (let i = 0; i < modules.length; i++) {
+          if (modules[i] !== '1') continue;
+          let j = i;
+          while (modules[j + 1] === '1') j++;
+          tempCtx.fillRect(edge(i), dy, edge(j + 1) - edge(i), barsHeight);
+          i = j;
+        }
 
-          const textSpace = showText ? renderFontSize + (6 * renderScale) : 0;
-          const availableHeight = Math.max(1, renderHeight - textSpace);
-
-          // Draw at natural width to keep integer-pixel bars.
-          // If the natural width exceeds the cache, the bars are clipped — we surface
-          // this with a "too small" indicator so the user can resize the element.
-          const drawW = tempImg.width;
-          let drawH = tempImg.height;
-          if (drawH > availableHeight) drawH = availableHeight;
-          // Snap horizontal offset to a multiple of renderScale so the 1:3 blit
-          // samples consistent pixels across bars.
-          const rawDx = Math.floor((renderWidth - drawW) / 2);
-          const dx = Math.floor(rawDx / renderScale) * renderScale;
-          const dy = 2 * renderScale;
-
-          tempCtx.drawImage(tempImg, dx, dy, drawW, drawH);
-
-          if (showText) {
-            const textY = dy + drawH + (2 * renderScale);
-            if (textY < renderHeight) {
-              tempCtx.fillStyle = 'black';
-              tempCtx.font = `${textBold ? 'bold ' : ''}${renderFontSize}px monospace`;
-              tempCtx.textAlign = 'center';
-              tempCtx.textBaseline = 'top';
-              tempCtx.fillText(barcodeData, renderWidth / 2, textY);
-            }
+        if (showText) {
+          const textY = dy + barsHeight + (2 * renderScale);
+          if (textY < renderHeight) {
+            tempCtx.font = `${textBold ? 'bold ' : ''}${renderFontSize}px monospace`;
+            tempCtx.textAlign = 'center';
+            tempCtx.textBaseline = 'top';
+            tempCtx.fillText(barcodeData, renderWidth / 2, textY);
           }
+        }
 
-          if (tooSmall) {
-            // Red strip along the bottom flags that bars dropped below 1 px at print
-            // resolution — barcode will not scan. User needs to widen the element.
-            const stripH = Math.max(1, Math.round(renderScale));
-            tempCtx.fillStyle = '#ff0000';
-            tempCtx.fillRect(0, renderHeight - stripH, renderWidth, stripH);
-          }
+        if (tooSmall) {
+          // Bars under 1 dot overflow the box and won't scan; flag it so the user widens the element.
+          const stripH = Math.max(1, Math.round(renderScale));
+          tempCtx.fillStyle = '#ff0000';
+          tempCtx.fillRect(0, renderHeight - stripH, renderWidth, stripH);
+        }
 
-          this._addToRenderCache(cacheKey, cachedCanvas);
-          URL.revokeObjectURL(url);
-
-          if (this.onAsyncLoad) {
-            this.onAsyncLoad();
-          }
-        };
-        tempImg.onerror = () => {
-          URL.revokeObjectURL(url);
-          logError('Barcode image load error', 'renderBarcode', ErrorLevel.WARNING);
-        };
-        tempImg.src = url;
+        this._addToRenderCache(cacheKey, cachedCanvas);
       } catch (e) {
         logError(e, 'renderBarcode');
       }
