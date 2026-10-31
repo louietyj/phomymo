@@ -4,7 +4,7 @@
  * v116
  */
 
-import { CanvasRenderer } from './canvas.js?v=115';
+import { CanvasRenderer } from './canvas.js?v=116';
 import { BLETransport } from './ble.js?v=106';
 import { USBTransport } from './usb.js?v=101';
 import { SerialTransport } from './serial.js?v=1';
@@ -86,7 +86,7 @@ import {
   D_SERIES_ROUND_LABELS,
   TAPE_LABEL_SIZES,
   PM241_LABEL_SIZES,
-} from './constants.js?v=106';
+} from './constants.js?v=107';
 import {
   bindCheckbox,
   bindToggleButton,
@@ -131,7 +131,7 @@ import {
   validateCSVFile,
   validateJSONFile,
   validatePosition,
-} from './utils/validation.js?v=101';
+} from './utils/validation.js?v=102';
 
 // DOM helpers
 const $ = (sel) => document.querySelector(sel);
@@ -6366,6 +6366,7 @@ function populateMobileProps() {
         <div class="prop-label">Format</div>
         <select id="mobile-prop-format" class="prop-input">
           <option value="CODE128" ${(selected.format || selected.barcodeFormat) === 'CODE128' ? 'selected' : ''}>Code 128</option>
+          <option value="GS1_128" ${(selected.format || selected.barcodeFormat) === 'GS1_128' ? 'selected' : ''}>GS1-128 (USPS)</option>
           <option value="EAN13" ${(selected.format || selected.barcodeFormat) === 'EAN13' ? 'selected' : ''}>EAN-13</option>
           <option value="UPC" ${(selected.format || selected.barcodeFormat) === 'UPC' ? 'selected' : ''}>UPC</option>
           <option value="CODE39" ${(selected.format || selected.barcodeFormat) === 'CODE39' ? 'selected' : ''}>Code 39</option>

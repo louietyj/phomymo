@@ -182,6 +182,7 @@ export function validateBarcodeData(data, format = 'CODE128') {
       UPC: 'UPC requires exactly 12 digits',
       CODE39: 'Code 39 only allows A-Z, 0-9, and -. $/+%',
       CODE128: 'Code 128 only allows ASCII characters',
+      GS1_128: 'GS1-128 only allows ASCII characters',
     };
     return {
       valid: false,

@@ -279,6 +279,7 @@ export const SHAPE = {
 export const BARCODE = {
   MAX_LENGTH: {
     CODE128: 80,
+    GS1_128: 80,
     EAN13: 13,
     CODE39: 43,
     UPC: 12,
@@ -288,6 +289,7 @@ export const BARCODE = {
     UPC: /^\d{0,12}$/,
     CODE39: /^[A-Z0-9\-. $/+%]*$/i,
     CODE128: /^[\x00-\x7F]*$/, // ASCII only
+    GS1_128: /^[\x00-\x7F]*$/,
   },
 };
 
@@ -338,6 +340,7 @@ export const SHAPE_TYPES = [
 // =============================================================================
 export const BARCODE_FORMATS = [
   { value: 'CODE128', label: 'Code 128' },
+  { value: 'GS1_128', label: 'GS1-128 (USPS)' },
   { value: 'EAN13', label: 'EAN-13' },
   { value: 'CODE39', label: 'Code 39' },
   { value: 'UPC', label: 'UPC-A' },

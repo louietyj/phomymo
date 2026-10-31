@@ -22,6 +22,36 @@ const OVERFLOW_PADDING = 120;
 const MAX_RENDER_CACHE_SIZE = 100;
 const MAX_IMAGE_CACHE_SIZE = 50;
 
+const GENERIC_FONT_FAMILIES = new Set(['serif', 'sans-serif', 'monospace', 'cursive', 'fantasy', 'system-ui']);
+
+// Unquoted, a family like `Code 128` is invalid CSS (a word starts with a digit)
+// and the canvas silently ignores the whole `ctx.font` assignment.
+function quoteFontFamilies(families) {
+  return families.split(',').map((f) => {
+    const name = f.trim();
+    return GENERIC_FONT_FAMILIES.has(name) || /^["']/.test(name) ? name : `"${name}"`;
+  }).join(', ');
+}
+
+// JsBarcode's in-data FNC1 character for CODE128
+const FNC1 = '\xCF';
+
+/**
+ * GS1_128 (USPS tracking) is Code 128 with a leading FNC1. Spaces are ignored;
+ * parenthesised AIs like `(420)94086(92)...` get an FNC1 between them.
+ */
+function jsBarcodeInput(data, format) {
+  if (format !== 'GS1_128') {
+    return { data, options: { format: format || 'CODE128' } };
+  }
+  const compact = data.replace(/\s+/g, '');
+  const groups = compact.match(/\(\d{2,4}\)[^(]*/g);
+  const encoded = groups && groups.join('') === compact
+    ? groups.map((g) => g.replace(/[()]/g, '')).join(FNC1)
+    : compact;
+  return { data: encoded, options: { format: 'CODE128', ean128: true } };
+}
+
 /**
  * Canvas renderer class
  */
@@ -925,7 +955,7 @@ export class CanvasRenderer {
     // Build font string with weight and style
     const weight = fontWeight === 'bold' ? 'bold' : '';
     const style = fontStyle === 'italic' ? 'italic' : '';
-    const fontStr = `${style} ${weight} ${effectiveFontSize}px ${fontFamily || 'Inter, sans-serif'}`.trim();
+    const fontStr = `${style} ${weight} ${effectiveFontSize}px ${quoteFontFamilies(fontFamily || 'Inter, sans-serif')}`.trim();
     this.ctx.font = fontStr;
     this.ctx.textBaseline = 'middle';
 
@@ -1045,7 +1075,7 @@ export class CanvasRenderer {
 
     while (minSize <= maxSize) {
       const testSize = Math.floor((minSize + maxSize) / 2);
-      const fontStr = `${style} ${weight} ${testSize}px ${fontFamily || 'Inter, sans-serif'}`.trim();
+      const fontStr = `${style} ${weight} ${testSize}px ${quoteFontFamilies(fontFamily || 'Inter, sans-serif')}`.trim();
       this.ctx.font = fontStr;
 
       let fits = false;
@@ -1166,6 +1196,8 @@ export class CanvasRenderer {
 
     if (!barcodeData || !barcodeData.trim()) return;
 
+    const { data: encodedData, options: formatOptions } = jsBarcodeInput(barcodeData, barcodeFormat);
+
     const showText = element.showText !== false;
     const textFontSize = element.textFontSize || 12;
     const textBold = element.textBold || false;
@@ -1182,8 +1214,8 @@ export class CanvasRenderer {
     let moduleCount = 0;
     try {
       const probeSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-      JsBarcode(probeSvg, barcodeData, {
-        format: barcodeFormat || 'CODE128',
+      JsBarcode(probeSvg, encodedData, {
+        ...formatOptions,
         width: 1,
         height: 10,
         displayValue: false,
@@ -1214,8 +1246,8 @@ export class CanvasRenderer {
 
         // Generate at the chosen integer module width; margin=0 since we center manually.
         const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-        JsBarcode(svg, barcodeData, {
-          format: barcodeFormat || 'CODE128',
+        JsBarcode(svg, encodedData, {
+          ...formatOptions,
           width: barWidthCache,
           height: Math.round(barcodeHeightScaled * 0.85),
           displayValue: false,
@@ -1608,7 +1640,7 @@ export class CanvasRenderer {
   wrapText(text, maxWidth, fontSize, fontFamily = 'Inter, sans-serif', fontWeight = 'normal', fontStyle = 'normal') {
     const weight = fontWeight === 'bold' ? 'bold' : '';
     const style = fontStyle === 'italic' ? 'italic' : '';
-    this.ctx.font = `${style} ${weight} ${fontSize}px ${fontFamily}`.trim();
+    this.ctx.font = `${style} ${weight} ${fontSize}px ${quoteFontFamilies(fontFamily)}`.trim();
 
     const lines = [];
 
