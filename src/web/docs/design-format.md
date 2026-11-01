@@ -118,7 +118,8 @@ narrower than one dot per module shows a red strip in the editor and won't scan.
 | `qrFormat` | `QR` (default), `DATAMATRIX`, `GS1_DATAMATRIX` |
 
 Drawn as a square of `min(width, height)`, with a one-module quiet zone. Data Matrix modules are whole dots,
-centred in the box. `GS1_DATAMATRIX` (the USPS IMmb) takes data as `GS1_128` barcodes do.
+centred in the box. `GS1_DATAMATRIX` (the USPS IMmb) takes data as `GS1_128` barcodes do, and is 20x20
+modules, as USPS requires, unless the data needs more.
 
 ## image
 

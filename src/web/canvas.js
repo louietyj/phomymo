@@ -74,12 +74,20 @@ function loadBwipjs() {
   return bwipjsLoad;
 }
 
-// Data Matrix module grid, row-major, 1 = dark. GS1 data starts with FNC1, as USPS IMmb does.
+// Data Matrix module grid, row-major, 1 = dark. GS1 data starts with FNC1, and is 20x20
+// when it fits, as the USPS IMmb spec requires.
 function dataMatrixModules(data, format) {
-  const text = format === 'GS1_DATAMATRIX'
-    ? gs1Fields(data).map((f) => `^FNC1${f}`).join('')
-    : data;
-  const [symbol] = bwipjs.raw({ bcid: 'datamatrix', text, parsefnc: format === 'GS1_DATAMATRIX' });
+  let symbol;
+  if (format === 'GS1_DATAMATRIX') {
+    const options = { bcid: 'datamatrix', text: gs1Fields(data).map((f) => `^FNC1${f}`).join(''), parsefnc: true };
+    try {
+      [symbol] = bwipjs.raw({ ...options, rows: 20, columns: 20 });
+    } catch {
+      [symbol] = bwipjs.raw(options);
+    }
+  } else {
+    [symbol] = bwipjs.raw({ bcid: 'datamatrix', text: data });
+  }
   return { pixs: symbol.pixs, columns: symbol.pixx, rows: symbol.pixy };
 }
 

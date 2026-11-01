@@ -4,7 +4,7 @@
  * v116
  */
 
-import { CanvasRenderer } from './canvas.js?v=118';
+import { CanvasRenderer } from './canvas.js?v=119';
 import { BLETransport } from './ble.js?v=106';
 import { USBTransport } from './usb.js?v=101';
 import { SerialTransport } from './serial.js?v=1';
