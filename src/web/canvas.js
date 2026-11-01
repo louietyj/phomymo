@@ -37,19 +37,50 @@ function quoteFontFamilies(families) {
 const FNC1 = '\xCF';
 
 /**
- * GS1_128 (USPS tracking) is Code 128 with a leading FNC1. Spaces are ignored;
- * parenthesised AIs like `(420)94086(92)...` get an FNC1 between them.
+ * Split GS1 data into the fields that need an FNC1 between them. Spaces are
+ * ignored; parenthesised AIs like `(420)94086(92)...` are separate fields.
  */
+function gs1Fields(data) {
+  const compact = data.replace(/\s+/g, '');
+  const groups = compact.match(/\(\d{2,4}\)[^(]*/g);
+  return groups && groups.join('') === compact
+    ? groups.map((g) => g.replace(/[()]/g, ''))
+    : [compact];
+}
+
+// GS1_128 (USPS tracking) is Code 128 with a leading FNC1.
 function jsBarcodeInput(data, format) {
   if (format !== 'GS1_128') {
     return { data, options: { format: format || 'CODE128' } };
   }
-  const compact = data.replace(/\s+/g, '');
-  const groups = compact.match(/\(\d{2,4}\)[^(]*/g);
-  const encoded = groups && groups.join('') === compact
-    ? groups.map((g) => g.replace(/[()]/g, '')).join(FNC1)
-    : compact;
-  return { data: encoded, options: { format: 'CODE128', ean128: true } };
+  return { data: gs1Fields(data).join(FNC1), options: { format: 'CODE128', ean128: true } };
+}
+
+const BWIPJS_URL = 'https://cdn.jsdelivr.net/npm/bwip-js@4.11.4/dist/bwip-js-min.js';
+let bwipjsLoad = null;
+
+// bwip-js is ~1 MB, so it loads only once a Data Matrix is drawn.
+function loadBwipjs() {
+  bwipjsLoad ??= new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = BWIPJS_URL;
+    script.onload = resolve;
+    script.onerror = () => {
+      bwipjsLoad = null;
+      reject(new Error('Failed to load bwip-js'));
+    };
+    document.head.appendChild(script);
+  });
+  return bwipjsLoad;
+}
+
+// Data Matrix module grid, row-major, 1 = dark. GS1 data starts with FNC1, as USPS IMmb does.
+function dataMatrixModules(data, format) {
+  const text = format === 'GS1_DATAMATRIX'
+    ? gs1Fields(data).map((f) => `^FNC1${f}`).join('')
+    : data;
+  const [symbol] = bwipjs.raw({ bcid: 'datamatrix', text, parsefnc: format === 'GS1_DATAMATRIX' });
+  return { pixs: symbol.pixs, columns: symbol.pixx, rows: symbol.pixy };
 }
 
 /**
@@ -216,7 +247,7 @@ export class CanvasRenderer {
       id: e.id, x: e.x, y: e.y, width: e.width, height: e.height,
       rotation: e.rotation, type: e.type, text: e.text,
       imageData: e.imageData?.substring(0, 50), // Just enough to detect changes
-      barcodeData: e.barcodeData, qrData: e.qrData,
+      barcodeData: e.barcodeData, barcodeFormat: e.barcodeFormat, qrData: e.qrData, qrFormat: e.qrFormat,
       brightness: e.brightness, contrast: e.contrast, dither: e.dither,
     }))) + `_${ditherMode}_${this.labelWidth}_${this.labelHeight}`;
 
@@ -1294,6 +1325,11 @@ export class CanvasRenderer {
 
     if (!qrData || !qrData.trim()) return;
 
+    if (element.qrFormat === 'DATAMATRIX' || element.qrFormat === 'GS1_DATAMATRIX') {
+      this.renderDataMatrix(element, width, height);
+      return;
+    }
+
     const size = Math.min(width, height);
     const cacheKey = `qr_${element.id}_${qrData}_${size}`;
     let cachedCanvas = this._getFromRenderCache(cacheKey);
@@ -1336,6 +1372,60 @@ export class CanvasRenderer {
       this.ctx.strokeStyle = '#ccc';
       this.ctx.strokeRect(-size / 2, -size / 2, size, size);
     }
+  }
+
+  /**
+   * Render a Data Matrix (centered at origin): whole-dot modules, one-module quiet zone.
+   */
+  renderDataMatrix(element, width, height) {
+    if (typeof bwipjs === 'undefined') {
+      // Counts as a pending load so phomymoPrintPreview() waits for it.
+      this.loadingImages.add('bwip-js');
+      loadBwipjs()
+        .then(() => this.onAsyncLoad?.(), (e) => logError(e, 'renderDataMatrix'))
+        .finally(() => this.loadingImages.delete('bwip-js'));
+      this.ctx.strokeStyle = '#ccc';
+      this.ctx.strokeRect(-width / 2, -height / 2, width, height);
+      return;
+    }
+
+    const boxWidth = Math.max(1, Math.round(width));
+    const boxHeight = Math.max(1, Math.round(height));
+    const cacheKey = `dm_${element.id}_${element.qrFormat}_${element.qrData}_${boxWidth}_${boxHeight}`;
+    let cachedCanvas = this._getFromRenderCache(cacheKey);
+
+    if (!cachedCanvas) {
+      try {
+        const { pixs, columns, rows } = dataMatrixModules(element.qrData, element.qrFormat);
+        const dotsPerModule = Math.max(1, Math.floor(Math.min(boxWidth / (columns + 2), boxHeight / (rows + 2))));
+        const left = Math.floor((boxWidth - columns * dotsPerModule) / 2);
+        const top = Math.floor((boxHeight - rows * dotsPerModule) / 2);
+
+        cachedCanvas = document.createElement('canvas');
+        cachedCanvas.width = boxWidth;
+        cachedCanvas.height = boxHeight;
+        const ctx = cachedCanvas.getContext('2d');
+        ctx.fillStyle = 'white';
+        ctx.fillRect(0, 0, boxWidth, boxHeight);
+        ctx.fillStyle = 'black';
+        for (let y = 0; y < rows; y++) {
+          for (let x = 0; x < columns; x++) {
+            if (pixs[y * columns + x]) {
+              ctx.fillRect(left + x * dotsPerModule, top + y * dotsPerModule, dotsPerModule, dotsPerModule);
+            }
+          }
+        }
+        this._addToRenderCache(cacheKey, cachedCanvas);
+      } catch (e) {
+        logError(e, 'renderDataMatrix');
+        return;
+      }
+    }
+
+    const prevSmoothing = this.ctx.imageSmoothingEnabled;
+    this.ctx.imageSmoothingEnabled = false;
+    this.ctx.drawImage(cachedCanvas, -width / 2, -height / 2, width, height);
+    this.ctx.imageSmoothingEnabled = prevSmoothing;
   }
 
   /**

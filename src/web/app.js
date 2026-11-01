@@ -4,7 +4,7 @@
  * v116
  */
 
-import { CanvasRenderer } from './canvas.js?v=117';
+import { CanvasRenderer } from './canvas.js?v=118';
 import { BLETransport } from './ble.js?v=106';
 import { USBTransport } from './usb.js?v=101';
 import { SerialTransport } from './serial.js?v=1';
@@ -2205,7 +2205,7 @@ function modifyElement(id, changes) {
   state.elements = updateElement(state.elements, id, changes);
 
   // Only clear cache if content or size changed (not just position/rotation)
-  const contentKeys = ['width', 'height', 'text', 'fontSize', 'fontFamily', 'fontWeight', 'fontStyle', 'textDecoration', 'background', 'noWrap', 'clipOverflow', 'autoScale', 'verticalAlign', 'imageData', 'barcodeData', 'barcodeFormat', 'qrData', 'brightness', 'contrast', 'dither', 'showText', 'textFontSize', 'textBold'];
+  const contentKeys = ['width', 'height', 'text', 'fontSize', 'fontFamily', 'fontWeight', 'fontStyle', 'textDecoration', 'background', 'noWrap', 'clipOverflow', 'autoScale', 'verticalAlign', 'imageData', 'barcodeData', 'barcodeFormat', 'qrData', 'qrFormat', 'brightness', 'contrast', 'dither', 'showText', 'textFontSize', 'textBold'];
   const needsCacheClear = Object.keys(changes).some(key => contentKeys.includes(key));
   if (needsCacheClear) {
     state.renderer.clearCache(id);
@@ -2440,6 +2440,7 @@ function updatePropertiesPanel() {
     case 'qr':
       $('#props-qr').classList.remove('hidden');
       $('#prop-qr-data').value = element.qrData || '';
+      $('#prop-qr-format').value = element.qrFormat || 'QR';
       break;
 
     case 'shape':
@@ -6393,7 +6394,16 @@ function populateMobileProps() {
       </div>
     `;
   } else if (selected.type === 'qr') {
+    const qrFormat = selected.qrFormat || 'QR';
     html += `
+      <div class="prop-group">
+        <div class="prop-label">Format</div>
+        <select id="mobile-prop-qrFormat" class="prop-input">
+          <option value="QR" ${qrFormat === 'QR' ? 'selected' : ''}>QR Code</option>
+          <option value="DATAMATRIX" ${qrFormat === 'DATAMATRIX' ? 'selected' : ''}>Data Matrix</option>
+          <option value="GS1_DATAMATRIX" ${qrFormat === 'GS1_DATAMATRIX' ? 'selected' : ''}>GS1 Data Matrix (USPS)</option>
+        </select>
+      </div>
       <div class="prop-group">
         <div class="flex items-center justify-between mb-1">
           <div class="prop-label mb-0">QR Content</div>
@@ -6658,6 +6668,7 @@ function wireUpMobilePropHandlers(element) {
     updateProp('format', e.target.value);
     element.barcodeFormat = e.target.value; // Also update legacy property
   });
+  $('#mobile-prop-qrFormat')?.addEventListener('change', (e) => updateProp('qrFormat', e.target.value));
   $('#mobile-prop-showText')?.addEventListener('change', (e) => {
     updateProp('showText', e.target.checked);
     // Show/hide text options
@@ -8049,6 +8060,11 @@ function init() {
       e.target.classList.remove('border-red-300');
     }
     modifyElement(id, { qrData: e.target.value });
+  });
+  $('#prop-qr-format').addEventListener('change', (e) => {
+    const id = state.selectedIds[0];
+    if (!id) return;
+    modifyElement(id, { qrFormat: e.target.value });
   });
 
 
